@@ -1,0 +1,192 @@
+// Medisentinel Threat Intelligence Framework Database Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./db/custom.db"
+}
+
+// User model with role-based access
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  password      String?
+  role          String    @default("staff") // admin, staff
+  department    String?
+  lastLogin     DateTime?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  createdAlerts  Alert[]
+  createdLogs    AttackLog[]
+  assignedMitigations Mitigation[]
+}
+
+// Hospital Assets (Servers, EMR Systems, Lab Machines, etc.)
+model Asset {
+  id              String    @id @default(cuid())
+  name            String
+  type            String    // server, emr, lab-machine, workstation, router, firewall, etc.
+  ipAddress       String?
+  macAddress      String?
+  os              String?
+  status          String    @default("active") // active, inactive, maintenance
+  criticality     String    @default("medium") // critical, high, medium, low
+  location        String?
+  lastScanned     DateTime?
+  vulnerabilities Vulnerability[]
+  threats         Threat[]
+  attackLogs      AttackLog[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// Vulnerability/CVE Database
+model Vulnerability {
+  id              String    @id @default(cuid())
+  cveId           String    @unique
+  title           String
+  description     String
+  severity        String    // critical, high, medium, low
+  cvssScore       Float?
+  publishedDate   DateTime?
+  modifiedDate    DateTime?
+  affectedAssets  String?
+  exploitStatus   String    @default("unknown") // active, weaponized, poc, unknown
+  solution        String?
+  references      String?
+  assetId         String?
+  asset           Asset?    @relation(fields: [assetId], references: [id])
+  mitigations     Mitigation[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// Threat Detection
+model Threat {
+  id              String    @id @default(cuid())
+  name            String
+  type            String    // malware, phishing, ddos, sql-injection, xss, brute-force, etc.
+  severity        String    // critical, high, medium, low
+  status          String    @default("active") // active, mitigated, false-positive, investigating
+  description     String
+  sourceIp        String?
+  targetIp        String?
+  sourceCountry   String?
+  techniqueId     String?   // MITRE ATT&CK technique ID
+  tacticId        String?   // MITRE ATT&CK tactic ID
+  confidence      Float     @default(0)
+  isConfirmed     Boolean   @default(false)
+  assetId         String?
+  asset           Asset?    @relation(fields: [assetId], references: [id])
+  mitigations     Mitigation[]
+  alerts          Alert[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// Risk Score Calculation
+model RiskScore {
+  id              String    @id @default(cuid())
+  assetId         String?
+  threatType      String?
+  overallScore    Float     @default(0)
+  threatScore     Float     @default(0)
+  vulnerabilityScore Float  @default(0)
+  assetCriticalityScore Float @default(0)
+  calculatedAt    DateTime  @default(now())
+  trend           String    @default("stable") // increasing, decreasing, stable
+}
+
+// Mitigation Suggestions
+model Mitigation {
+  id              String    @id @default(cuid())
+  title           String
+  description     String
+  type            String    // patch, configuration, monitoring, firewall, training, etc.
+  priority        String    @default("medium") // critical, high, medium, low
+  status          String    @default("pending") // pending, in-progress, completed, skipped
+  estimatedEffort String?   // hours
+  threatId        String?
+  threat          Threat?   @relation(fields: [threatId], references: [id])
+  vulnerabilityId String?
+  vulnerability   Vulnerability? @relation(fields: [vulnerabilityId], references: [id])
+  assignedTo      String?
+  assignedToUser  User?     @relation(fields: [assignedTo], references: [id])
+  dueDate         DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// Attack Logs
+model AttackLog {
+  id              String    @id @default(cuid())
+  timestamp       DateTime  @default(now())
+  attackType      String
+  severity        String
+  sourceIp        String?
+  sourcePort      Int?
+  destinationIp   String?
+  destinationPort Int?
+  protocol        String?
+  payload         String?
+  status          String    // blocked, detected, allowed
+  description     String
+  assetId         String?
+  asset           Asset?    @relation(fields: [assetId], references: [id])
+  userId          String?
+  user            User?     @relation(fields: [userId], references: [id])
+  mitigated       Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+}
+
+// Alert System
+model Alert {
+  id              String    @id @default(cuid())
+  type            String    // email, sms, dashboard, webhook
+  severity        String
+  title           String
+  message         String
+  status          String    @default("unread") // unread, read, acknowledged
+  alertType       String    // threat, vulnerability, system
+  threatId        String?
+  threat          Threat?   @relation(fields: [threatId], references: [id])
+  sentAt          DateTime  @default(now())
+  acknowledgedAt  DateTime?
+  userId          String?
+  user            User?     @relation(fields: [userId], references: [id])
+  createdAt       DateTime  @default(now())
+}
+
+// Automated Reports
+model Report {
+  id              String    @id @default(cuid())
+  title           String
+  type            String    // daily, weekly, monthly, incident
+  summary         String
+  threatCount     Int       @default(0)
+  vulnerabilityCount Int    @default(0)
+  riskScore       Float     @default(0)
+  generatedBy     String?
+  generatedAt     DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+}
+
+// MITRE ATT&CK Framework Data (Reference)
+model MitreAttack {
+  id              String    @id @default(cuid())
+  techniqueId     String    @unique
+  tacticId        String
+  name            String
+  description     String
+  category        String    // initial-access, execution, persistence, etc.
+  detection       String?
+  mitigation      String?
+  createdAt       DateTime  @default(now())
+}
